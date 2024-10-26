@@ -1,0 +1,40 @@
+{
+    "name": "@terbangin/backend",
+    "version": "1.0.0",
+    "description": "**Terbangin Backend API - Powering Your Flight Booking Experience**",
+    "main": "index.js",
+    "scripts": {
+        "dev": "npx nodemon index.js",
+        "start": "npx sequelize-cli db:migrate && node index.js",
+        "fresh": "npx sequelize-cli db:migrate:undo:all && npx sequelize-cli db:migrate"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "algoliasearch": "^4.23.3",
+        "axios": "^1.7.2",
+        "bcrypt": "^5.1.1",
+        "cloudinary": "^2.2.0",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.19.2",
+        "express-fileupload": "^1.5.0",
+        "jsonwebtoken": "^9.0.2",
+        "midtrans-client": "^1.3.1",
+        "moment": "^2.30.1",
+        "moment-timezone": "^0.5.45",
+        "mysql2": "^3.11.3",
+        "nodemailer": "^6.9.13",
+        "pg": "^8.11.5",
+        "pg-hstore": "^2.3.4",
+        "sequelize": "^6.37.3",
+        "sequelize-cli": "^6.6.2",
+        "socket.io": "^4.7.5",
+        "twilio": "^5.1.0",
+        "uuid": "^9.0.1"
+    },
+    "devDependencies": {
+        "nodemon": "^3.1.0"
+    }
+}
