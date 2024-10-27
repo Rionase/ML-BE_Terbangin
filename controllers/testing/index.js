@@ -3,6 +3,7 @@ const seatUsecase = require("../../usecases/seat/index");
 
 const { v4: uuidv4 } = require("uuid");
 const { recomendation } = require("../../helpers/recomendation")
+const XLSX = require('xlsx');
 
 exports.insertSeat = async (req,res,next) => {
 
@@ -79,4 +80,34 @@ exports.insertSeat = async (req,res,next) => {
     res.status(200).json({
         message: "berhasil",
     })
+}
+
+exports.getAvailableFlight = async (req,res,next) => {
+    let data = await seatUsecase.avaibleFlightsBySeatsData()
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+
+    res.setHeader('Content-Disposition', 'attachment; filename="data.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+    res.send(excelBuffer);
+}
+
+exports.recomendation = async (req,res,next) => {
+    try {
+        let data = recomendation(req.user.id)
+        res.status(200).json({
+            data: data,
+            message: "berhasil"
+        })
+    } catch (err) {
+        res.status(err.statusCode).json({
+            message: err.message
+        })
+    }
 }

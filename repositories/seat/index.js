@@ -1,4 +1,5 @@
 const { Flights, Seats, Airlines, Airports } = require("../../models");
+const { Sequelize } = require('sequelize');
 
 exports.getSeats = async () => {
     const data = await Seats.findAll({
@@ -97,3 +98,40 @@ exports.deleteSeatbyFlight = async (id) => {
 
     return null;
 };
+
+exports.avaibleFlightsBySeatsData = async () => {
+    const data = await Seats.findAll({
+        attributes: [
+            'airlineClass',
+            [Sequelize.fn('COUNT', Sequelize.col('Seats.airlineClass')), 'airlineClassCount'] // count airlineClass
+        ],
+        group: [
+            'Seats.flightId', 'Seats.airlineClass'
+        ],
+        include: {
+            model: Flights,
+            attributes: ['id', 'departureAt', 'arrivalAt'],
+            include: [
+                {
+                    model: Airlines,
+                },
+                { 
+                    model: Airports, 
+                    as: "StartAirport" ,
+                    attributes: ['name', 'city', 'country']
+                },
+                { 
+                    model: Airports, 
+                    as: "EndAirport" ,
+                    attributes: ['name', 'city', 'country']
+                },
+            ],
+        },
+        order: [
+            [Flights, 'departureAt', 'ASC'], // Order by Flights departureAt
+        ]
+    });
+
+    return data
+
+}
