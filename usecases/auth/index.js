@@ -5,6 +5,7 @@ const {
     createUser,
     getUserByEmail,
     getUserByPhoneNumber,
+    getAllUserIdButNotMyself
 } = require("../../repositories/user");
 
 const { getGoogleAccessTokenData } = require("../../repositories/user/login");
@@ -98,3 +99,7 @@ exports.googleLogin = async (accessToken) => {
 
     return data;
 };
+
+exports.getAllUserIdButNotMyself = async (myId) => {
+    return await getAllUserIdButNotMyself(myId)
+}

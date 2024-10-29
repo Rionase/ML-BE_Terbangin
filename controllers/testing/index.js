@@ -99,15 +99,11 @@ exports.getAvailableFlight = async (req,res,next) => {
 }
 
 exports.recomendation = async (req,res,next) => {
-    try {
-        let data = recomendation(req.user.id)
-        res.status(200).json({
-            data: data,
-            message: "berhasil"
-        })
-    } catch (err) {
-        res.status(err.statusCode).json({
-            message: err.message
-        })
-    }
+    let recomendationId = await recomendation(req.user) 
+
+    let recomendationData = await flightUsecase.recomendationFlight(recomendationId, req.query.page);
+
+    res.status(200).json({
+        data: recomendationData
+    })
 }

@@ -134,3 +134,6 @@ dist
 
 # tmp folder
 tmp/
+
+# log folder
+log/

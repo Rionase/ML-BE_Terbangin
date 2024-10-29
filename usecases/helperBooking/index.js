@@ -32,8 +32,8 @@ exports.getHelperBookingBySeatId = async (seatId) => {
     return data;
 };
 
-exports.getHelperBookingByUserId = async (userId,value) => {
-  const data = await helperBookingRepo.getHelperBookingByUserId(userId,value);
+exports.getHelperBookingByUserId = async (userId,value = "", limit = null) => {
+  const data = await helperBookingRepo.getHelperBookingByUserId(userId,value,limit);
 
   return data;
 };

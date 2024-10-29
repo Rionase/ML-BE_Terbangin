@@ -1,5 +1,5 @@
 const { Flights, Airlines, Airports } = require("../../models");
-const { Op, where } = require("sequelize");
+const { Op, where, Sequelize } = require("sequelize");
 const moment = require("moment");
 
 exports.getFlights = async () => {
@@ -245,3 +245,66 @@ exports.deleteFlight = async (id) => {
 
   return null;
 };
+
+exports.recomendationFlight = async (recomendationIdArray, page) => {
+  const now = new Date(); // Get current date and time
+
+  let result = []
+
+  if ( recomendationIdArray.length > 0 ) {
+    const recomendationData = await Flights.findAll({
+      where: {
+        deletedAt: null,
+        [Op.and]: [
+          { id: { [Op.in]: recomendationIdArray } },
+          { departureAt: { [Op.gt]: new Date() } }  // Make sure to use the current date
+        ]
+      },
+      include: [
+        { model: Airlines, required: false, where: { deletedAt: null } },
+        { model: Airports, as: 'StartAirport', required: false, where: { deletedAt: null } },
+        { model: Airports, as: 'EndAirport', required: false, where: { deletedAt: null } }
+      ],
+      order: [
+        [
+          Sequelize.literal(`FIELD(Flights.id, ${recomendationIdArray.map(id => `'${id}'`).join(', ')})`),
+          'ASC'
+        ],  // Add this to order by departureAt after prioritizing IDs
+      ],
+      limit: 8,
+      offset: page * 8
+    });
+  
+    result = [...recomendationData]
+  }
+
+  if ( result.length < 8 ) {
+
+    let limit = 8 - result.length
+    let offset = page * 8
+    if ( recomendationIdArray.length > 0 ) {
+      offset = page - ( Math.floor(recomendationIdArray.length / 8) )
+    }
+
+    const otherFlights = await Flights.findAll({
+      where: {
+        deletedAt: null,
+        id: { [Op.notIn]: recomendationIdArray },  // Exclude flights in recomendationIdArray
+        departureAt: { [Op.gt]: new Date() }       // Only flights with departureAt in the future
+      },
+      include: [
+        { model: Airlines, required: false, where: { deletedAt: null } },
+        { model: Airports, as: 'StartAirport', required: false, where: { deletedAt: null } },
+        { model: Airports, as: 'EndAirport', required: false, where: { deletedAt: null } }
+      ],
+      order: Sequelize.literal('priceEconomy ASC'),
+      limit: limit,
+      offset: offset * 8
+    });
+
+    result = [...result, ...otherFlights]
+  }
+  
+  return result;
+
+}

@@ -5,6 +5,7 @@ const { Users } = require("../../models");
 const uploader = require("../../helpers/cloudinary");
 const profileUtils = require("./utils");
 const { v4: uuidv4 } = require("uuid");
+const { Op } = require('sequelize');
 
 exports.createUser = async (payload) => {
     payload.password = await bcrypt.hash(payload.password, 10);
@@ -66,3 +67,12 @@ exports.deleteUserById = async (id) => {
     await Users.destroy({ where: { id } });
     return toBeDeleted;
 };
+
+exports.getAllUserIdButNotMyself = async (myId) => {
+    return Users.findAll({
+        attributes: ['id', 'fullname', 'email'],
+        where: {
+            id: { [Op.ne]: myId } // Exclude the specified 'id'
+        }
+    })
+}

@@ -56,3 +56,7 @@ exports.deleteFlight = async (id) => {
   return data;
 };
 
+exports.recomendationFlight = async (recomendationIdArray, page) => {
+  const data = await flightsRepo.recomendationFlight(recomendationIdArray, page)
+  return data;
+}

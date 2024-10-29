@@ -135,7 +135,7 @@ exports.getHelperBookingBySeatId = async (seatId) => {
   return data;
 };
 
-exports.getHelperBookingByUserId = async (userId, value) => {
+exports.getHelperBookingByUserId = async (userId, value, limit = null) => {
   let whereClause = {};
   if (value != "") {
     whereClause["status"] = value;
@@ -172,6 +172,8 @@ exports.getHelperBookingByUserId = async (userId, value) => {
         },
       },
     ],
+    ...(limit !== null && { limit }), // Add limit if provided
+    order: [['createdAt', 'DESC']],
   };
 
   const data = await HelperBookings.findAll(opt);

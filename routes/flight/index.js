@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const flightController = require("../../controllers/flight");
+const { nonAuthMiddleware } = require("../../middlewares/nonAuth");
 
 router.patch(
   "/decrementcapacity/:id",
@@ -19,6 +20,6 @@ router
   .put(flightController.updateFlight)
   .delete(flightController.deleteFlight);
 
-router.route("/continent").get(flightController.getFlightsbyContinent);
+router.route("/continent").get(nonAuthMiddleware, flightController.getFlightsbyContinent);
 
 module.exports = router;
