@@ -136,77 +136,81 @@ exports.getHelperBookingBySeatId = async (seatId) => {
 };
 
 exports.getHelperBookingByUserId = async (userId, value, limit = null) => {
-  let whereClause = {};
-  if (value != "") {
-    whereClause["status"] = value;
-  }
-  const opt = {
-    include: [
-      {
-        model: Seats,
-        include: {
-          model: Flights,
-          include: [
-            {
-              model: Airlines,
-            },
-            {
-              model: Airports,
-              as: "StartAirport",
-            },
-            {
-              model: Airports,
-              as: "EndAirport",
-            },
-          ],
-        },
-      },
-      {
-        model: Bookings,
-        where: {
-          userId,
-        },
-        include: {
-          model: Payments,
-          where: whereClause,
-        },
-      },
-    ],
-    ...(limit !== null && { limit }), // Add limit if provided
-    order: [['createdAt', 'DESC']],
-  };
-
-  const data = await HelperBookings.findAll(opt);
-
-  if (!data || data.length === 0) {
-    throw {
-      statusCode: 404,
-      message: `Helper booking not found`,
-    };
-  }
-
-  // Use a new Set to store entire booking data objects (assuming uniqueness based on object reference)
-  // Create a set to store unique booking IDs
-  const uniqueBookingIds = new Set();
-  const filteredData = new Set();
-
-  // Extract and add unique booking IDs to the set
-  data.forEach((booking) => {
-    const bookingId = booking.bookingId; // Assuming bookingId is in Bookings object
-    uniqueBookingIds.add(bookingId);
-  });
-
-  console.log(uniqueBookingIds);
-
-  // Filter original data based on unique booking IDs
-  data.forEach((booking) => {
-    if (uniqueBookingIds.has(booking.bookingId)) {
-        filteredData.add(booking);
-        uniqueBookingIds.delete(booking.bookingId)
+  try {
+    let whereClause = {};
+    if (value != "") {
+      whereClause["status"] = value;
     }
-  });
+    const opt = {
+      include: [
+        {
+          model: Seats,
+          include: {
+            model: Flights,
+            include: [
+              {
+                model: Airlines,
+              },
+              {
+                model: Airports,
+                as: "StartAirport",
+              },
+              {
+                model: Airports,
+                as: "EndAirport",
+              },
+            ],
+          },
+        },
+        {
+          model: Bookings,
+          where: {
+            userId,
+          },
+          include: {
+            model: Payments,
+            where: whereClause,
+          },
+        },
+      ],
+      ...(limit !== null && { limit }), // Add limit if provided
+      order: [["createdAt", "DESC"]],
+    };
 
-  return Array.from(filteredData);
+    const data = await HelperBookings.findAll(opt);
+
+    if (!data || data.length === 0) {
+      throw {
+        statusCode: 404,
+        message: `Helper booking not found`,
+      };
+    }
+
+    // Use a new Set to store entire booking data objects (assuming uniqueness based on object reference)
+    // Create a set to store unique booking IDs
+    const uniqueBookingIds = new Set();
+    const filteredData = new Set();
+
+    // Extract and add unique booking IDs to the set
+    data.forEach((booking) => {
+      const bookingId = booking.bookingId; // Assuming bookingId is in Bookings object
+      uniqueBookingIds.add(bookingId);
+    });
+
+    console.log(uniqueBookingIds);
+
+    // Filter original data based on unique booking IDs
+    data.forEach((booking) => {
+      if (uniqueBookingIds.has(booking.bookingId)) {
+        filteredData.add(booking);
+        uniqueBookingIds.delete(booking.bookingId);
+      }
+    });
+
+    return Array.from(filteredData);
+  } catch (err) {
+    return [];
+  }
 };
 
 exports.updateHelperBooking = async (id, payload) => {
