@@ -113,100 +113,102 @@ function sortMapData(data) {
     return sortedKeys
 }
 
-exports.recomendation = async (user) => {
+// Rekomendasi
+exports.recommendation = async (user) => {
+    if (!user) return [];
 
-    // IF USER IS NOT LOGIN
-    if (!user) {
-        return []
-    }
-    
-    let myBookingData = await helperBookingUsecase.getHelperBookingByUserId(user.id, "", 10)
+    const myBookingData = await helperBookingUsecase.getHelperBookingByUserId(user.id, "", 10);
+    if (myBookingData.length === 0) return [];
 
-    // IF USER DIDN'T BOOK ANY TICKET YET, THEN RETURN EMPTY RECOMENDATION FLIGHT ID
-    if ( myBookingData.length == 0 ) {
-        return []
-    }
+    const myFormattedBookingData = formatData(myBookingData);
+    const allBookingData = await getOtherData(user.id);
 
-    let myFormatedBookingData = formatData(myBookingData)
-
-    let allBookingData = await getOtherData(user.id)
-
-    let recomendationMap = {}
-    let recomendationLog = {}
+    // Buat matriks interaksi
+    const interactionMatrix = {};
+    const allFlightIds = new Set();
 
     allBookingData.forEach(item => {
-        for ( let otherData of item.bookingData ) {
-            for ( let myData of myFormatedBookingData ) {
+        const userId = item.userId;
+        interactionMatrix[userId] = {};
 
-                let tmpPoint = 0
-                let tmpLogText = `${myData["departure"]["time"]} | ${myData['airlineName']} | ${myData["departure"]["city"]} - ${myData["arrival"]["city"]} | `
+        item.bookingData.forEach(booking => {
+            const flightId = booking.flightId;
+            allFlightIds.add(flightId);
 
-                // IF BOTH FLIGHT SAME, THEN +1
-                if ( otherData["flightId"] === myData["flightId"] ) {
-                    tmpPoint += 1
-                    tmpLogText += "+1 FROM SAME FLIGHT, "
-                }
+            let point = 0;
+            if (booking.flightId === myFormattedBookingData[0].flightId) point++;
+            if (booking.airlineName === myFormattedBookingData[0].airlineName) point++;
+            if (booking.departure.city === myFormattedBookingData[0].departure.city && booking.departure.country === myFormattedBookingData[0].departure.country) point++;
+            if (booking.arrival.city === myFormattedBookingData[0].arrival.city && booking.arrival.country === myFormattedBookingData[0].arrival.country) point++;
+            if (isSameDay(booking.departure.time, myFormattedBookingData[0].departure.time)) point++;
+            if (Math.abs(booking.price - myFormattedBookingData[0].price) < 500000) point++;
 
-                // IF BOTH SAME AIRLINE, THEN +1
-                if ( otherData['airlineName'] == myData['airlineName'] ) {
-                    tmpPoint += 1
-                    tmpLogText += "+1 FROM SAME AIRLINE, "
-                }
+            interactionMatrix[userId][flightId] = point;
+        });
+    });
 
-                // IF BOTH DEPARTURE CITY AND COUNTRY THE SAME, THEN + 1
-                if ( otherData["departure"]["city"] == myData["departure"]["city"] && otherData["departure"]["country"] == myData["departure"]["country"] ) {
-                    tmpPoint += 1
-                    tmpLogText += "+1 FROM SAME DEPARTURE COUNTRY AND CITY, "
-                }
+    // Tambahkan data pengguna sendiri
+    interactionMatrix[user.id] = {};
+    myFormattedBookingData.forEach(booking => {
+        interactionMatrix[user.id][booking.flightId] = 1; // Asumsi poin 1 untuk pengguna sendiri
+    });
 
-                // IF BOTH ARRIVAL CITY AND COUNTRY THE SAME, THEN + 1
-                if ( otherData["arrival"]["city"] == myData["arrival"]["city"] && otherData["arrival"]["country"] == myData["arrival"]["country"] ) {
-                    tmpPoint += 1
-                    tmpLogText += "+1 FROM SAME ARRIVAL COUNTRY AND CITY, "
-                }
+    // Hitung cosine similarity
+    const similarityMatrix = computeCosineSimilarity(interactionMatrix);
 
-                // IF BOTH ARE THE SAME DAY, THEN +1
-                if ( isSameDay(otherData["departure"]["time"], myData["departure"]["time"]) ) {
-                    tmpPoint += 1
-                    tmpLogText += "+1 FROM SAME DAY, "
-                }
-
-                // IF THE DIFFERENCE NOT MORE THAN 500.000, THEN +1
-                if ( Math.abs(otherData["price"] - myData["price"]) < 500000 ) {
-                    tmpPoint += 1
-                    tmpLogText += "+1 FROM SAME PRICE RANGE"
-                }
-
-                // CHECK IF FLIGHT ID IS IN RECOMENDATION MAP
-                if ( otherData["flightId"] in recomendationMap ) {
-                    recomendationMap[otherData["flightId"]] += tmpPoint
-                } else {
-                    recomendationMap[otherData["flightId"]] = tmpPoint
-                    recomendationLog[otherData["flightId"]] = {
-                        "flight": `${otherData["departure"]["time"]} | ${otherData['airlineName']} | ${otherData["departure"]["city"]} - ${otherData["arrival"]["city"]}`,
-                        "user": {},
-                        "point": 0,
-                        "log": [],
-                    }
-                }
-
-                // WRITE LOG
-                if ( tmpPoint == 0 ) {
-                    tmpLogText += "DOESN'T HAVE ANY SIMILARITY"
-                }
-
-                recomendationLog[otherData["flightId"]]["log"].push(tmpLogText)
-                recomendationLog[otherData["flightId"]]['user'][item['email']] = true
-                recomendationLog[otherData["flightId"]]["point"] += tmpPoint
-
-            }
+    // Prediksi preferensi
+    const recommendations = {};
+    [...allFlightIds].forEach(flightId => {
+        if (!interactionMatrix[user.id][flightId]) {
+            const score = predictPreference(user.id, flightId, similarityMatrix, interactionMatrix);
+            recommendations[flightId] = score;
         }
     });
 
-    let sortedData = sortMapData(recomendationMap)
+    // Urutkan rekomendasi berdasarkan skor prediksi
+    return Object.entries(recommendations).sort(([, a], [, b]) => b - a).map(([key]) => key);
+};
 
-    writeLogData(user.email, recomendationLog)
+// Hitung Cosine Similarity
+const computeCosineSimilarity = (matrix) => {
+    const similarityMatrix = {};
+    const keys = Object.keys(matrix);
 
-    return sortedData
-    
-}
+    for (let userA of keys) {
+        similarityMatrix[userA] = {};
+        for (let userB of keys) {
+            if (userA === userB) {
+                similarityMatrix[userA][userB] = 1;
+                continue;
+            }
+
+            // Hitung cosine similarity
+            const vecA = matrix[userA];
+            const vecB = matrix[userB];
+            const dotProduct = vecA.reduce((sum, val, idx) => sum + val * vecB[idx], 0);
+            const normA = Math.sqrt(vecA.reduce((sum, val) => sum + val ** 2, 0));
+            const normB = Math.sqrt(vecB.reduce((sum, val) => sum + val ** 2, 0));
+
+            similarityMatrix[userA][userB] = dotProduct / (normA * normB || 1);
+        }
+    }
+
+    return similarityMatrix;
+};
+
+// Prediksi preferensi
+const predictPreference = (user, ticketId, similarityMatrix, interactionMatrix) => {
+    const neighbors = Object.keys(similarityMatrix[user]).filter(
+        neighbor => neighbor !== user && interactionMatrix[neighbor][ticketId] !== undefined
+    );
+
+    const numerator = neighbors.reduce((sum, neighbor) => {
+        const sim = similarityMatrix[user][neighbor];
+        const score = interactionMatrix[neighbor][ticketId];
+        return sum + sim * score;
+    }, 0);
+
+    const denominator = neighbors.reduce((sum, neighbor) => sum + Math.abs(similarityMatrix[user][neighbor]), 0);
+
+    return denominator ? numerator / denominator : 0;
+};
