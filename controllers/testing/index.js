@@ -2,8 +2,9 @@ const flightUsecase = require("../../usecases/flight/index");
 const seatUsecase = require("../../usecases/seat/index");
 
 const { v4: uuidv4 } = require("uuid");
-const { recomendation } = require("../../helpers/recomendation")
+const recomendationHelper = require("../../helpers/recomendation")
 const XLSX = require('xlsx');
+const recomendationUsecase = require("../../usecases/recomendation/index.js")
 
 exports.insertSeat = async (req,res,next) => {
 
@@ -99,11 +100,50 @@ exports.getAvailableFlight = async (req,res,next) => {
 }
 
 exports.recomendation = async (req,res,next) => {
-    let recomendationId = await recomendation(req.user) 
 
-    let recomendationData = await flightUsecase.recomendationFlight(recomendationId, req.query.page);
+    let page = req.query.page;
+    
+    if (!req.user) {
+        let result = await recomendationUsecase.findDefaultRecomendation(page)
+        return res.status(200).json({ data: result })
+    }
+
+    let allUserTicket = await recomendationUsecase.findAllUserTicket();
+    let myId = req.user.id;
+    let myEmail = req.user.email;
+    let myTicket = allUserTicket[myId];
+    
+    // jika user tidak pernah membeli ticket
+    if ( !myTicket ) {
+        let result = await recomendationUsecase.findDefaultRecomendation(page)
+        return res.status(200).json({ data: result })
+    }
+    
+    let allTicket = await recomendationUsecase.findAllAvailableTicket();
+    let allUser = await recomendationUsecase.findAllUser();
+    
+    let matriks_interaction = recomendationHelper.CalculateMatriksInteraction(allTicket, allUser, allUserTicket);
+
+    let cosine_similarity = recomendationHelper.CalculateCosineSimilarity(myId, allUser, matriks_interaction);
+
+    let prediction_preference = recomendationHelper.CalculatePredictionPreference(myId, allUser, allTicket, matriks_interaction, cosine_similarity);
+
+    // const sortedRecomedationFlightId = Object.fromEntries(
+    //     Object.entries(prediction_preference).sort((a, b) => b[1] - a[1])
+    // );
+
+    await recomendationHelper.exportAll(myEmail, allTicket, allUser, matriks_interaction, cosine_similarity, prediction_preference)
+
+    let endResult = recomendationHelper.mergedAndSortEndResult(prediction_preference, allTicket)
+
+    let limit = 8
+    let startItem = ( page - 1 ) * limit;
+    let endItem = startItem + limit;
+    let slicedResult = endResult.slice(startItem, endItem)
+
+    // res.status(200).json(allUserTicket)
 
     res.status(200).json({
-        data: recomendationData
+        data: slicedResult
     })
 }
