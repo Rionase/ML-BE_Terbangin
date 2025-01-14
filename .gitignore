@@ -137,3 +137,6 @@ tmp/
 
 # log folder
 log/
+
+# export folder
+export/

@@ -1,214 +1,259 @@
-const helperBookingUsecase = require("../usecases/helperBooking");
-const authUsecase = require("../usecases/auth")
-const fs = require('fs');
-const path = require('path');
+const ExcelJS = require("exceljs");
 
-let formatData = (data) => {
+exports.CalculateMatriksInteraction = (allTicket, allUser, allUserTicket) => {
+    let result = []
 
-    let formattedData = []
-
-    data.forEach(item => {
-        let flightId = item['Seat']['flightId'];
-        let airlineClass = item['Seat']['airlineClass'];
-        let price = 0;
-
-        if ( airlineClass == "ECONOMY" ) {
-            price = item['Seat']['Flight']['priceEconomy']
-        } else if ( airlineClass == "BUSINESS" ) {
-            price = item['Seat']['Flight']['priceBussines']
-        } else if ( airlineClass == "FIRST_CLASS" ) {
-            price = item['Seat']['Flight']['priceFirstClass']
+    allUser.forEach(user => {
+        let currentUserTicket = allUserTicket[user.id];
+        // jika user tidak memiliki history pembelian ticket
+        if (!currentUserTicket) {
+            currentUserTicket = [];
         }
 
-        let airlineName = item['Seat']['Flight']['Airline']['name']
-        let airlineType = item['Seat']['Flight']['Airline']['aircraftType']
-
-        let departureTime = item['Seat']['Flight']['departureAt']
-        let departureAirport = item['Seat']['Flight']['StartAirport']['name']
-        let departureCity = item['Seat']['Flight']['StartAirport']['city']
-        let departureCountry = item['Seat']['Flight']['StartAirport']['country']
-
-        let arrivalTime = item['Seat']['Flight']['arrivalAt']
-        let arrivalAirport = item['Seat']['Flight']['EndAirport']['name']
-        let arrivalCity = item['Seat']['Flight']['EndAirport']['city']
-        let arrivalCountry = item['Seat']['Flight']['EndAirport']['country']
-
-        formattedData.push({
-            flightId: flightId,
-            class: airlineClass,
-            price: price,
-            airlineName: airlineName,
-            airlineType: airlineType,
-            departure: {
-                time: departureTime,
-                airportName: departureAirport,
-                city: departureCity,
-                country: departureCountry
-            },
-            arrival: {
-                time: arrivalTime,
-                airportName: arrivalAirport,
-                city: arrivalCity,
-                country: arrivalCountry
-            }
-        })
-    })
-
-    return formattedData;
-}
-
-let getOtherData = async (myId) => {
-    let allFormatedBookingData = []
-
-    let allUserId = await authUsecase.getAllUserIdButNotMyself(myId)
-
-    for ( let item of allUserId ) {
-        let userBookingData = await helperBookingUsecase.getHelperBookingByUserId(item['id'], "", 10)
-        let formattedUserData = formatData(userBookingData)
-        
-        allFormatedBookingData.push({
-            userId: item['id'],
-            email: item['email'],
-            bookingData: formattedUserData
-        })
-    }
-
-    return allFormatedBookingData
-}
-
-function isSameDay(date1, date2) {
-    const d1 = new Date(date1);
-    const d2 = new Date(date2);
-    return d1.toISOString().slice(0, 10) === d2.toISOString().slice(0, 10);
-}
-
-function writeLogData(userEmail, data) {
-
-    const sortedData = Object.fromEntries(
-        Object.entries(data).sort(([, a], [, b]) => b.point - a.point)
-    );
-
-    // Ensure log directory exists
-    const logDir = 'log';
-    if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true });
-    }
-
-    // Construct file path based on user Email
-    const filePath = path.join(logDir, `${userEmail}.json`);
-    
-    // Convert data to JSON with 4-space indentation
-    const jsonData = JSON.stringify(sortedData, null, 4);
-    
-    // Write data to the file
-    fs.writeFileSync(filePath, jsonData, 'utf-8');
-}
-
-function sortMapData(data) {
-    // Convert to array of [key, value] pairs and sort by value in descending order
-    const sortedKeys = Object.entries(data)
-    .sort(([, a], [, b]) => b - a)
-    .map(([key]) => key);
-
-    return sortedKeys
-}
-
-// Rekomendasi
-exports.recommendation = async (user) => {
-    if (!user) return [];
-
-    const myBookingData = await helperBookingUsecase.getHelperBookingByUserId(user.id, "", 10);
-    if (myBookingData.length === 0) return [];
-
-    const myFormattedBookingData = formatData(myBookingData);
-    const allBookingData = await getOtherData(user.id);
-
-    // Buat matriks interaksi
-    const interactionMatrix = {};
-    const allFlightIds = new Set();
-
-    allBookingData.forEach(item => {
-        const userId = item.userId;
-        interactionMatrix[userId] = {};
-
-        item.bookingData.forEach(booking => {
-            const flightId = booking.flightId;
-            allFlightIds.add(flightId);
-
-            let point = 0;
-            if (booking.flightId === myFormattedBookingData[0].flightId) point++;
-            if (booking.airlineName === myFormattedBookingData[0].airlineName) point++;
-            if (booking.departure.city === myFormattedBookingData[0].departure.city && booking.departure.country === myFormattedBookingData[0].departure.country) point++;
-            if (booking.arrival.city === myFormattedBookingData[0].arrival.city && booking.arrival.country === myFormattedBookingData[0].arrival.country) point++;
-            if (isSameDay(booking.departure.time, myFormattedBookingData[0].departure.time)) point++;
-            if (Math.abs(booking.price - myFormattedBookingData[0].price) < 500000) point++;
-
-            interactionMatrix[userId][flightId] = point;
+        let matriks = []
+        allTicket.forEach(ticket => {
+            matriks.push(CalculateTicketSimilarity(ticket, currentUserTicket))
         });
+        result.push(matriks)
+    });
+    return result
+
+}
+
+let CalculateTicketSimilarity = (ticketToCompare, userTicketHistory) => {
+    let point = 0;
+    userTicketHistory.forEach(item => {
+        if ( item['flights_id'] == ticketToCompare['flights_id'] ) point++;
+        if ( item['airline_id'] == ticketToCompare['airline_id'] ) point++;
+        if ( item['departure_city'] == ticketToCompare['departure_city'] && item['departure_country'] == ticketToCompare['departure_country'] ) point++;
+        if ( item['arrival_city'] == ticketToCompare['arrival_city'] && item['arrival_country'] == ticketToCompare['arrival_country'] ) point++;
+        if ( item['departure_date'] == ticketToCompare['departure_date'] ) point++;
+        if ( Math.abs(item['price'] - ticketToCompare['price']) <= 5000000 ) point++
+    });
+    return point
+}
+
+exports.CalculateCosineSimilarity = (myId, allUser, matriksInteraksi) => {
+    let myUserIndex = allUser.findIndex(user => user.id == myId);
+    let myMatriksInteraksi = matriksInteraksi[myUserIndex];
+
+    let result = [];
+
+    matriksInteraksi.forEach(item => {
+        result.push(ConsineSimilarity(myMatriksInteraksi, item))
     });
 
-    // Tambahkan data pengguna sendiri
-    interactionMatrix[user.id] = {};
-    myFormattedBookingData.forEach(booking => {
-        interactionMatrix[user.id][booking.flightId] = 1; // Asumsi poin 1 untuk pengguna sendiri
-    });
+    return result;
+}
 
-    // Hitung cosine similarity
-    const similarityMatrix = computeCosineSimilarity(interactionMatrix);
-
-    // Prediksi preferensi
-    const recommendations = {};
-    [...allFlightIds].forEach(flightId => {
-        if (!interactionMatrix[user.id][flightId]) {
-            const score = predictPreference(user.id, flightId, similarityMatrix, interactionMatrix);
-            recommendations[flightId] = score;
-        }
-    });
-
-    // Urutkan rekomendasi berdasarkan skor prediksi
-    return Object.entries(recommendations).sort(([, a], [, b]) => b - a).map(([key]) => key);
-};
-
-// Hitung Cosine Similarity
-const computeCosineSimilarity = (matrix) => {
-    const similarityMatrix = {};
-    const keys = Object.keys(matrix);
-
-    for (let userA of keys) {
-        similarityMatrix[userA] = {};
-        for (let userB of keys) {
-            if (userA === userB) {
-                similarityMatrix[userA][userB] = 1;
-                continue;
-            }
-
-            // Hitung cosine similarity
-            const vecA = matrix[userA];
-            const vecB = matrix[userB];
-            const dotProduct = vecA.reduce((sum, val, idx) => sum + val * vecB[idx], 0);
-            const normA = Math.sqrt(vecA.reduce((sum, val) => sum + val ** 2, 0));
-            const normB = Math.sqrt(vecB.reduce((sum, val) => sum + val ** 2, 0));
-
-            similarityMatrix[userA][userB] = dotProduct / (normA * normB || 1);
-        }
+let ConsineSimilarity = (myMatriksInteraksi, otherMatriksInteraksi) => {
+     // Check if both matrices have the same length
+     if (myMatriksInteraksi.length !== otherMatriksInteraksi.length) {
+        throw new Error("Both interaction matrices must have the same length.");
     }
 
-    return similarityMatrix;
-};
+    // Calculate the dot product: Σ(r_ai * r_bi)
+    let dotProduct = 0;
+    let magnitudeA = 0;
+    let magnitudeB = 0;
 
-// Prediksi preferensi
-const predictPreference = (user, ticketId, similarityMatrix, interactionMatrix) => {
-    const neighbors = Object.keys(similarityMatrix[user]).filter(
-        neighbor => neighbor !== user && interactionMatrix[neighbor][ticketId] !== undefined
-    );
+    for (let i = 0; i < myMatriksInteraksi.length; i++) {
+        const r_ai = myMatriksInteraksi[i];
+        const r_bi = otherMatriksInteraksi[i];
 
-    const numerator = neighbors.reduce((sum, neighbor) => {
-        const sim = similarityMatrix[user][neighbor];
-        const score = interactionMatrix[neighbor][ticketId];
-        return sum + sim * score;
-    }, 0);
+        dotProduct += r_ai * r_bi; // Sum of products
+        magnitudeA += r_ai ** 2;  // Sum of squares for U_a
+        magnitudeB += r_bi ** 2;  // Sum of squares for U_b
+    }
 
-    const denominator = neighbors.reduce((sum, neighbor) => sum + Math.abs(similarityMatrix[user][neighbor]), 0);
+    // Calculate magnitudes: √Σ(r_ai^2) and √Σ(r_bi^2)
+    magnitudeA = Math.sqrt(magnitudeA);
+    magnitudeB = Math.sqrt(magnitudeB);
 
-    return denominator ? numerator / denominator : 0;
-};
+    // Handle edge case: if either magnitude is 0, similarity is 0
+    if (magnitudeA === 0 || magnitudeB === 0) {
+        return 0;
+    }
+
+    // Calculate Cosine Similarity: Sim(U_a, U_b) = dotProduct / (magnitudeA * magnitudeB)
+    return dotProduct / (magnitudeA * magnitudeB);
+}
+
+exports.CalculatePredictionPreference = (myId, allUser, allTicket, matriksInteraksi, consineSimilarity) => {
+
+    let result = [];
+
+    let myUserIndex = allUser.findIndex(user => user.id == myId);
+
+    let rataRataNilaiInteraksi = [];
+    matriksInteraksi.forEach(item => {
+        // rata rata = total nilai interaksi / jumlah nilai interaksi
+        let total = item.reduce((a, b) => a + b, 0)
+        rataRataNilaiInteraksi.push(total / item.length)
+    });
+
+    // total cosine similarity tanpa cosine similarity milik sendiri
+    let totalCosine = consineSimilarity.reduce((a, b) => Math.abs(a) + Math.abs(b), 0) - Math.abs(consineSimilarity[myUserIndex]);
+    
+    allTicket.forEach((ticket, ticketIndex) => {
+        let totalKontribusi = 0;
+        allUser.forEach((user, userIndex) => {
+            if (userIndex != myUserIndex) {
+                let kontribusi = consineSimilarity[userIndex] * ( matriksInteraksi[userIndex][ticketIndex] - rataRataNilaiInteraksi[userIndex] );
+                totalKontribusi += kontribusi;
+            }
+        });
+        
+        let hasil_pembagian = 0;
+        if (totalCosine !== 0) {
+            hasil_pembagian = totalKontribusi / totalCosine
+        }
+        let predictionPreference = rataRataNilaiInteraksi[myUserIndex] + (hasil_pembagian)
+        result.push({
+            flight_id: ticket.flights_id,
+            flight_class: ticket.class,
+            prediction_preference: predictionPreference
+        })
+    });
+
+    return result;
+}
+
+let writeExcel = (worksheet, listHeaderX, listHeaderY, content) => {
+
+    // Add X headers (column headers)
+    worksheet.addRow(["", ...listHeaderX]); // Empty cell for the first column (Y headers)
+    
+    // Add content with Y headers
+    listHeaderY.forEach((headerY, rowIndex) => {
+        worksheet.addRow([headerY, ...content[rowIndex]]);
+    });
+
+    // Adjust column widths for better readability
+    worksheet.columns = [
+        { width: 20 }, // Y header column
+        ...listHeaderX.map(() => ({ width: 20 })), // X header columns
+    ];
+}
+
+// Will Export :
+// Sheet 1: Matriks Interaksi
+// Sheet 2: Cosine Similarity
+// Sheet 3: Prediksi Preferensi
+exports.exportAll = async (email, allTicket, allUser, matriksInteraksi, consineSimilarity, predictionPreference) => {
+
+    let exportPath = 'export/' + email + ".xlsx";
+    const workbook = new ExcelJS.Workbook();
+
+    // sheet 1
+    const worksheet1 = workbook.addWorksheet("Matriks Interaksi");
+
+    let headerX_matriksInteraksi = allTicket.map(item => `${item.flight_code} - ${item.class}`);
+    let headerY_matriksInteraksi = allUser.map(item => `${item.email}`);
+
+    writeExcel(worksheet1, headerX_matriksInteraksi, headerY_matriksInteraksi, matriksInteraksi);
+    
+    // sheet 2
+    const worksheet2 = workbook.addWorksheet("Cosine Similarity");
+    let headerX_cosine = allUser.map(item => `${item.email}`);
+    let headerY_cosine = [email];
+    
+    writeExcel(worksheet2, headerX_cosine, headerY_cosine, [consineSimilarity])
+
+    // sheet 3
+    const worksheet3 = workbook.addWorksheet("Prediction Preference");
+    let headerX_preference = allTicket.map(item => `${item.flight_code} - ${item.class}`);
+    let headerY_preference = [email];
+
+    let predictionContent = SortPredictionPreferenceExcelData(predictionPreference, allTicket)
+    
+    writeExcel(worksheet3, headerX_preference, headerY_preference, [predictionContent])
+
+     // Save the file
+    await workbook.xlsx.writeFile(exportPath);
+}
+
+function SortPredictionPreferenceExcelData(predictionPreference, allTicket) {
+    const mergedData = predictionPreference.map(preference => {
+        const matchingTicket = allTicket.find(ticket => 
+          ticket.flights_id === preference.flight_id && ticket.class === preference.flight_class
+        );
+    
+        if (matchingTicket) {
+            return {
+                flight_id: preference.flight_id,
+                flight_class: preference.flight_class,
+                prediction_preference: preference.prediction_preference,
+                flight_code: matchingTicket.flight_code,
+                airline_name: matchingTicket.airline_name,
+                departure_city: matchingTicket.departure_city,
+                arrival_city: matchingTicket.arrival_city,
+                departure_at: matchingTicket.departure_at,
+                price: matchingTicket.price,
+                departure_timezone: matchingTicket.departure_timezone,
+                picture: matchingTicket.picture,
+                departure_iataCode: matchingTicket.departure_iataCode,
+                arrival_iataCode: matchingTicket.arrival_iataCode
+            };
+        }
+    
+        return null; // Return null if no matching ticket is found
+      });
+    
+      return mergedData
+        .filter(entry => entry !== null) // Remove null entries
+        .map(entry => entry.prediction_preference); 
+}
+
+exports.mergedAndSortEndResult = (predictionPreference, allTicket) => {
+    const mergedData = predictionPreference.map(preference => {
+        const matchingTicket = allTicket.find(ticket => 
+          ticket.flights_id === preference.flight_id && ticket.class === preference.flight_class
+        );
+    
+        if (matchingTicket) {
+            return {
+                id: preference.flight_id,
+                flight_class: preference.flight_class,
+                prediction_preference: preference.prediction_preference,
+                flight_code: matchingTicket.flight_code,
+                airline_name: matchingTicket.airline_name,
+                departure_city: matchingTicket.departure_city,
+                arrival_city: matchingTicket.arrival_city,
+                departure_date: matchingTicket.departure_date,
+                departure_time: matchingTicket.departure_time,
+                price: matchingTicket.price,
+                departure_timezone: matchingTicket.departure_timezone,
+                picture: matchingTicket.picture,
+                departure_iataCode: matchingTicket.departure_iataCode,
+                arrival_iataCode: matchingTicket.arrival_iataCode
+            };
+
+            // return {
+            //     id: preference.flight_id,
+            //     StartAirport: {
+            //         city: matchingTicket.departure_city,
+            //         iataCode: matchingTicket.departure_iataCode,
+            //     }
+            // }
+        }
+    
+        return null; // Return null if no matching ticket is found
+      });
+    
+      // Filter out null values (in case of unmatched entries)
+      const filteredData = mergedData.filter(entry => entry !== null);
+    
+      // Sort by prediction_preference DESC, departure_date ASC, price DESC
+      filteredData.sort((a, b) => {
+        if (b.prediction_preference !== a.prediction_preference) {
+          return b.prediction_preference - a.prediction_preference; // DESC for prediction_preference
+        }
+        if (a.departure_time.getTime() !== b.departure_time.getTime()) {
+          return a.departure_time - b.departure_time; // ASC for departure_date
+        }
+        return b.price - a.price; // DESC for price
+      });
+    
+      return filteredData;
+}
